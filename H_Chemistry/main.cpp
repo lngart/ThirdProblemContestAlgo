@@ -130,24 +130,78 @@ T FindMaxFlow(std::unique_ptr<IGraph<T>> &graph, T start_vertex, T finish_vertex
 }
 
 template <typename T>
-void GetMaxFlow(std::unique_ptr<IGraph<T>> &graph) {
-    T start_vertex = 0, finish_vertex = graph->Size() - 1;
-    std::cout << FindMaxFlow(graph, start_vertex, finish_vertex);  // We use numbering from 0
+T GetMaxFlow(std::unique_ptr<IGraph<T>> &graph) {
+    T start_vertex = 0, finish_vertex = graph->Size() - 1;  // We use numbering from 0
+    return FindMaxFlow(graph, start_vertex, finish_vertex);
 }
 
-template <typename T>
-void Initialization(std::unique_ptr<IGraph<T>> &graph, size_t &num_vertices, size_t &num_edges) {
-    std::cin >> num_vertices >> num_edges;
-    graph = std::make_unique<ListGraph<T>>(num_vertices);
-}
+size_t GetValenceAtom(char atom) {
+    std::vector<char> atoms_increasing_valence = {'H', 'O', 'N', 'C'};
 
-template <typename T>
-void AddingEdge(std::unique_ptr<IGraph<T>> &graph, size_t num_edges) {
-    for (size_t i{0}; i < num_edges; ++i) {
-        T from{0}, to{0}, weight{0};
-        std::cin >> from >> to >> weight;
-        graph->AddEdge(from - 1, to - 1, weight);  // We use numbering from 0
+    for (size_t valence{0}; valence < atoms_increasing_valence.size(); ++valence) {
+        if (atom == atoms_increasing_valence[valence]) {
+            return valence + 1;
+        }
     }
+
+    return 0;
+}
+
+size_t GetPosition(size_t first_coordinate, size_t second_coordinate, size_t sheet_length) {
+    return first_coordinate * sheet_length + second_coordinate + 1;
+}
+
+template <typename T>
+void AddingEdge(std::unique_ptr<IGraph<T>> &graph, size_t sheet_width, size_t sheet_length, T &start_flow,
+                T &end_flow) {
+    for (size_t first_coordinate{0}; first_coordinate < sheet_width; ++first_coordinate) {
+        for (size_t second_coordinate{0}; second_coordinate < sheet_length; ++second_coordinate) {
+            char atom;
+            std::cin >> atom;
+
+            if ((first_coordinate % 2 + second_coordinate % 2) % 2 == 0) {
+                graph->AddEdge(0, GetPosition(first_coordinate, second_coordinate, sheet_length), GetValenceAtom(atom));
+                start_flow += GetValenceAtom(atom);
+
+                if (first_coordinate + 1 < sheet_width) {
+                    graph->AddEdge(GetPosition(first_coordinate, second_coordinate, sheet_length),
+                                   GetPosition(first_coordinate + 1, second_coordinate, sheet_length), 1);
+                }
+
+                if (second_coordinate + 1 < sheet_length) {
+                    graph->AddEdge(GetPosition(first_coordinate, second_coordinate, sheet_length),
+                                   GetPosition(first_coordinate, second_coordinate + 1, sheet_length), 1);
+                }
+
+                if (first_coordinate >= 1) {
+                    graph->AddEdge(GetPosition(first_coordinate, second_coordinate, sheet_length),
+                                   GetPosition(first_coordinate - 1, second_coordinate, sheet_length), 1);
+                }
+
+                if (second_coordinate >= 1) {
+                    graph->AddEdge(GetPosition(first_coordinate, second_coordinate, sheet_length),
+                                   GetPosition(first_coordinate, second_coordinate - 1, sheet_length), 1);
+                }
+            } else {
+                graph->AddEdge(GetPosition(first_coordinate, second_coordinate, sheet_length), graph->Size() - 1,
+                               GetValenceAtom(atom));
+                end_flow += GetValenceAtom(atom);
+            }
+        }
+    }
+}
+
+template <typename T>
+void IsValidChemicalCompound(std::unique_ptr<IGraph<T>> &graph, T start_flow, T end_flow) {
+    T max_flow = GetMaxFlow(graph);
+
+    std::cout << (start_flow == max_flow && end_flow == max_flow && max_flow != 0 ? "Valid" : "Invalid");
+}
+
+template <typename T>
+void Initialization(std::unique_ptr<IGraph<T>> &graph, size_t &sheet_width, size_t &sheet_length) {
+    std::cin >> sheet_width >> sheet_length;
+    graph = std::make_unique<ListGraph<T>>(sheet_width * sheet_length + 2);
 }
 
 int main() {
@@ -155,15 +209,15 @@ int main() {
     std::cin.tie(nullptr);
     std::cout.tie(nullptr);
 
-    size_t num_vertices{0}, num_edges{0};
+    size_t sheet_width{0}, sheet_length{0}, start_flow{0}, end_flow{0};
 
     std::unique_ptr<IGraph<size_t>> graph;
 
-    Initialization(graph, num_vertices, num_edges);
+    Initialization(graph, sheet_width, sheet_length);
 
-    AddingEdge(graph, num_edges);
+    AddingEdge(graph, sheet_width, sheet_length, start_flow, end_flow);
 
-    GetMaxFlow(graph);
+    IsValidChemicalCompound(graph, start_flow, end_flow);
 
     return 0;
 }
