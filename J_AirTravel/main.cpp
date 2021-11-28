@@ -56,36 +56,40 @@ public:
 };
 
 template <typename T>
-void FindtMinDistanceFromVertex(std::unique_ptr<IGraph<T>> &graph, std::vector<T> &distance, T start_vertex) {
+void FindMinDistanceFromVertex(std::unique_ptr<IGraph<T>> &graph, std::vector<T> &distance,
+                               std::vector<T> &new_distance, size_t way_length, size_t start_vertex) {
     distance[start_vertex] = 0;
+    new_distance[start_vertex] = 0;
 
-    for (size_t i{0}; i < graph->Size() - 1; ++i) {
+    for (size_t i{0}; i < way_length; ++i) {
         for (const auto &edge : graph->GetEdges()) {
             if (distance[edge.start_edge] < std::numeric_limits<T>::max()) {
-                distance[edge.end_edge] =
-                    std::min(distance[edge.end_edge], distance[edge.start_edge] + edge.weight_edge);
+                new_distance[edge.end_edge] =
+                    std::min(new_distance[edge.end_edge], distance[edge.start_edge] + edge.weight_edge);
             }
         }
+
+        distance = new_distance;
     }
 }
 
 template <typename T>
-void PrintMinDistanceFromVertex(std::unique_ptr<IGraph<T>> &graph) {
-    T start_vertex{0};
+void PrintMinDistanceFromVertex(std::unique_ptr<IGraph<T>> &graph, size_t way_length, size_t start_vertex,
+                                size_t end_vertex) {
+    std::vector<T> distance(graph->Size(), std::numeric_limits<T>::max()),
+        new_distance(graph->Size(), std::numeric_limits<T>::max());
 
-    std::vector<T> distance(graph->Size(), std::numeric_limits<T>::max());
+    FindMinDistanceFromVertex(graph, distance, new_distance, way_length, start_vertex);
 
-    FindtMinDistanceFromVertex(graph, distance, start_vertex);
-
-    for (const auto &el : distance) {
-        std::cout << (el == std::numeric_limits<T>::max() ? 30000 : el) << " ";
-    }
+    std::cout << (new_distance[end_vertex] == std::numeric_limits<T>::max() ? -1 : new_distance[end_vertex]);
 }
 
 template <typename T>
-void Initialization(std::unique_ptr<IGraph<T>> &graph, size_t &num_vertices, size_t &num_edges) {
-    std::cin >> num_vertices >> num_edges;
-    graph = std::make_unique<ListGraph<T>>(num_vertices);
+void Initialization(std::unique_ptr<IGraph<T>> &graph, size_t &num_cities, size_t &num_flights, size_t &num_nights,
+                    size_t &starting_city, size_t &ending_city) {
+    std::cin >> num_cities >> num_flights >> num_nights >> starting_city >> ending_city;
+    --starting_city, --ending_city;  // We use numbering from 0
+    graph = std::make_unique<ListGraph<T>>(num_cities);
 }
 
 template <typename T>
@@ -102,15 +106,15 @@ int main() {
     std::cin.tie(nullptr);
     std::cout.tie(nullptr);
 
-    size_t num_vertices{0}, num_edges{0};
+    size_t num_cities{0}, num_flights{0}, num_nights{0}, starting_city{0}, ending_city{0};
 
-    std::unique_ptr<IGraph<int>> graph;
+    std::unique_ptr<IGraph<int>> flight_route;
 
-    Initialization(graph, num_vertices, num_edges);
+    Initialization(flight_route, num_cities, num_flights, num_nights, starting_city, ending_city);
 
-    AddingEdge(graph, num_edges);
+    AddingEdge(flight_route, num_flights);
 
-    PrintMinDistanceFromVertex(graph);
+    PrintMinDistanceFromVertex(flight_route, num_nights, starting_city, ending_city);
 
     return 0;
 }
