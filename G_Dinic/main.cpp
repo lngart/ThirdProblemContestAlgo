@@ -47,31 +47,55 @@ public:
     }
 };
 
-enum class Color { WHITE, BLACK };
-
 template <typename T>
-bool BFS(std::unique_ptr<IGraph<T>> &graph, T start_vertex, T finish_vertex,
-         std::vector<std::vector<T>> &edges_capacity, std::vector<T> &parents) {
-    std::vector<Color> colors(graph->Size(), Color::WHITE);
-
+bool BFS(std::unique_ptr<IGraph<T>> &graph, T start_vertex, T finish_vertex, std::vector<T> &layers,
+         std::vector<std::vector<T>> &edges_capacity) {
     std::queue<T> vertices_queue;
     vertices_queue.emplace(start_vertex);
-    colors[start_vertex] = Color::BLACK;
 
-    while (!vertices_queue.empty() && colors[finish_vertex] == Color::WHITE) {
+    layers[start_vertex] = 0;
+
+    while (!vertices_queue.empty()) {
         auto current_vertex = vertices_queue.front();
         vertices_queue.pop();
 
         for (T vertex{0}; vertex < graph->Size(); ++vertex) {
-            if (colors[vertex] == Color::WHITE && edges_capacity[current_vertex][vertex] > 0) {
-                parents[vertex] = current_vertex;
-                colors[vertex] = Color::BLACK;
+            if (layers[vertex] == std::numeric_limits<T>::max() && edges_capacity[current_vertex][vertex] > 0) {
+                layers[vertex] = layers[current_vertex] + 1;
                 vertices_queue.emplace(vertex);
             }
         }
     }
 
-    return static_cast<bool>(colors[finish_vertex]);
+    return (layers[finish_vertex] != std::numeric_limits<T>::max());
+}
+
+template <typename T>
+T DFS(std::unique_ptr<IGraph<T>> &graph, T current_vertex, T finish_vertex, T current_flow, std::vector<T> &layers,
+      std::vector<T> &ends_available_edges, std::vector<std::vector<T>> &edges_capacity) {
+    if (current_flow == 0) {
+        return 0;
+    }
+
+    if (current_vertex == finish_vertex) {
+        return current_flow;
+    }
+
+    for (T &next_vertex = ends_available_edges[current_vertex]; next_vertex < graph->Size(); ++next_vertex) {
+        if (layers[next_vertex] == layers[current_vertex] + 1) {
+            T flow_change = DFS(graph, next_vertex, finish_vertex,
+                                std::min(current_flow, edges_capacity[current_vertex][next_vertex]), layers,
+                                ends_available_edges, edges_capacity);
+
+            if (flow_change > 0) {
+                edges_capacity[current_vertex][next_vertex] -= flow_change;
+                edges_capacity[next_vertex][current_vertex] += flow_change;
+                return flow_change;
+            }
+        }
+    }
+
+    return 0;
 }
 
 template <typename T>
@@ -85,27 +109,23 @@ T FindMaxFlow(std::unique_ptr<IGraph<T>> &graph, T start_vertex, T finish_vertex
     }
 
     T max_flow{0};
-    std::vector<T> parents(graph->Size(), std::numeric_limits<T>::max());
 
-    while (BFS(graph, start_vertex, finish_vertex, edges_capacity, parents)) {
-        T flow_change = std::numeric_limits<T>::max();
+    std::vector<T> layers(graph->Size(), std::numeric_limits<T>::max());
 
-        for (T current_vertex{finish_vertex}; current_vertex != start_vertex;
-             current_vertex = parents[current_vertex]) {
-            auto current_parent = parents[current_vertex];
-            flow_change = std::min(flow_change, edges_capacity[current_parent][current_vertex]);
+    while (BFS(graph, start_vertex, finish_vertex, layers, edges_capacity)) {
+        std::vector<T> ends_available_edges(graph->Size());
+
+        T flow_change = DFS(graph, start_vertex, finish_vertex, std::numeric_limits<T>::max(), layers,
+                            ends_available_edges, edges_capacity);
+
+        while (flow_change > 0) {
+            max_flow += flow_change;
+            flow_change = DFS(graph, start_vertex, finish_vertex, std::numeric_limits<T>::max(), layers,
+                              ends_available_edges, edges_capacity);
         }
 
-        max_flow += flow_change;
-
-        for (T current_vertex{finish_vertex}; current_vertex != start_vertex;
-             current_vertex = parents[current_vertex]) {
-            auto current_parent = parents[current_vertex];
-            edges_capacity[current_vertex][current_parent] += flow_change;
-            edges_capacity[current_parent][current_vertex] -= flow_change;
-        }
+        layers.assign(layers.size(), std::numeric_limits<T>::max());
     }
-
     return max_flow;
 }
 
