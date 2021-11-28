@@ -1,2 +1,0 @@
-# ThirdProblemContestAlgo
-# ThirdProblemContestAlgo
