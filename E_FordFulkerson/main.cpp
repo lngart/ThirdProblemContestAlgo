@@ -5,37 +5,44 @@
 #include <numeric>
 #include <map>
 
-template <typename T>
+template <typename T, typename U>
 class IGraph {
 public:
     using Vertex = T;
 
     struct Edge {
-        Edge(Vertex start, Vertex end) : start_edge{start}, end_edge{end} {
+        Edge(Vertex start, Vertex end, U new_weight = 1) : start_edge{start}, end_edge{end}, weight{new_weight} {
         }
 
         Vertex start_edge;
         Vertex end_edge;
 
-        bool operator<(const Edge &other) const {
-            return (start_edge != other.start_edge ? start_edge < other.start_edge : end_edge < other.end_edge);
-        }
+        U weight;
     };
 
-    virtual const std::vector<T> &GetNeighbors(Vertex v) const = 0;
-    virtual void AddEdge(Vertex from, Vertex to, T weight) = 0;
-    virtual T GetEdgeWeight(Vertex from, Vertex to) = 0;
+    virtual const std::vector<Vertex> &GetNeighbors(Vertex v) const = 0;
+    virtual void AddEdge(Vertex from, Vertex to, U weight = 1) = 0;
+    virtual U GetEdgeWeight(Vertex from, Vertex to) = 0;
     virtual size_t Size() const = 0;
     virtual ~IGraph() = default;
 };
 
-template <typename T>
-class ListGraph : public IGraph<T> {
-    using typename IGraph<T>::Vertex;
-    using typename IGraph<T>::Edge;
+template <typename T, typename U>
+struct EdgeLess {
+    using Edge = typename IGraph<T, U>::Edge;
+
+    bool operator()(const Edge &lhs, const Edge &rhs) const {
+        return (lhs.start_edge != rhs.start_edge ? lhs.start_edge < rhs.start_edge : lhs.end_edge < rhs.end_edge);
+    }
+};
+
+template <typename T, typename U>
+class ListGraph : public IGraph<T, U> {
+    using typename IGraph<T, U>::Vertex;
+    using typename IGraph<T, U>::Edge;
 
     std::vector<std::vector<Vertex>> vertices_;
-    std::map<Edge, T> flows_;
+    std::map<Edge, U, EdgeLess<T, U>> weights_;
 
 public:
     explicit ListGraph(size_t num_vertices) : vertices_(num_vertices) {
@@ -45,13 +52,13 @@ public:
         return vertices_[v];
     }
 
-    void AddEdge(Vertex from, Vertex to, T weight) override {
-        vertices_[from].push_back(to);
-        flows_[Edge(from, to)] += weight;
+    void AddEdge(Vertex from, Vertex to, U weight = 1) override {
+        vertices_[from].emplace_back(to);
+        weights_[Edge(from, to)] += weight;
     }
 
-    T GetEdgeWeight(Vertex from, Vertex to) override {
-        return flows_[Edge(from, to)];
+    U GetEdgeWeight(Vertex from, Vertex to) override {
+        return weights_[Edge(from, to)];
     }
 
     size_t Size() const override {
@@ -61,10 +68,10 @@ public:
 
 enum class Color { WHITE, BLACK };
 
-template <typename T>
-T DFS(IGraph<T> &graph, T start_vertex, T finish_vertex, T current_flow, std::vector<Color> &colors,
-      std::map<typename IGraph<T>::Edge, T> &edges_capacity) {
-    using Edge = typename IGraph<T>::Edge;
+template <typename T, typename U>
+U DFS(IGraph<T, U> &graph, T start_vertex, T finish_vertex, U current_flow, std::vector<Color> &colors,
+      std::map<typename IGraph<T, U>::Edge, U, EdgeLess<T, U>> &edges_capacity) {
+    using Edge = typename IGraph<T, U>::Edge;
 
     if (start_vertex == finish_vertex) {
         return current_flow;
@@ -89,11 +96,11 @@ T DFS(IGraph<T> &graph, T start_vertex, T finish_vertex, T current_flow, std::ve
     return 0;
 }
 
-template <typename T>
-T FindMaxFlow(IGraph<T> &graph, T start_vertex, T finish_vertex) {
-    using Edge = typename IGraph<T>::Edge;
+template <typename T, typename U>
+U GetMaxFlow(IGraph<T, U> &graph, T start_vertex, T finish_vertex) {
+    using Edge = typename IGraph<T, U>::Edge;
 
-    std::map<Edge, T> edges_capacity;
+    std::map<Edge, U, EdgeLess<T, U>> edges_capacity;
 
     for (T vertex{0}; vertex < graph.Size(); ++vertex) {
         for (const auto &neighbor : graph.GetNeighbors(vertex)) {
@@ -101,31 +108,32 @@ T FindMaxFlow(IGraph<T> &graph, T start_vertex, T finish_vertex) {
         }
     }
 
-    T flow_change = std::numeric_limits<T>::max();
-    T max_flow{0};
+    U flow_change = std::numeric_limits<U>::max();
+    U max_flow{0};
     while (flow_change > 0) {
         std::vector<Color> colors(graph.Size(), Color::WHITE);
-        flow_change = DFS(graph, start_vertex, finish_vertex, std::numeric_limits<T>::max(), colors, edges_capacity);
+        flow_change = DFS(graph, start_vertex, finish_vertex, std::numeric_limits<U>::max(), colors, edges_capacity);
         max_flow += flow_change;
     }
 
     return max_flow;
 }
 
-template <typename T>
-void GetMaxFlow(IGraph<T> &graph) {
+template <typename T, typename U>
+void PrintMaxFlow(IGraph<T, U> &graph) {
     T start_vertex = 0, finish_vertex = graph.Size() - 1;
-    std::cout << FindMaxFlow(graph, start_vertex, finish_vertex);  // We use numbering from 0
+    std::cout << GetMaxFlow(graph, start_vertex, finish_vertex);  // We use numbering from 0
 }
 
 void Initialization(size_t &num_vertices, size_t &num_edges) {
     std::cin >> num_vertices >> num_edges;
 }
 
-template <typename T>
-void AddingEdge(IGraph<T> &graph, size_t num_edges) {
+template <typename T, typename U>
+void AddingEdge(IGraph<T, U> &graph, size_t num_edges) {
     for (size_t i{0}; i < num_edges; ++i) {
-        T from{0}, to{0}, weight{0};
+        T from{0}, to{0};
+        U weight{0};
         std::cin >> from >> to >> weight;
         graph.AddEdge(from - 1, to - 1, weight);  // We use numbering from 0
     }
@@ -140,11 +148,11 @@ int main() {
 
     Initialization(num_vertices, num_edges);
 
-    ListGraph<size_t> graph(num_vertices);
+    ListGraph<size_t, size_t> graph(num_vertices);
 
     AddingEdge(graph, num_edges);
 
-    GetMaxFlow(graph);
+    PrintMaxFlow(graph);
 
     return 0;
 }
