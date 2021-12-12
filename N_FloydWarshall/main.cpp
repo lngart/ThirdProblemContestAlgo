@@ -1,47 +1,57 @@
 #include <iostream>
 #include <limits>
 #include <vector>
+#include <map>
 
-template <typename T>
+template <typename T, typename U>
 class IGraph {
 public:
     using Vertex = T;
 
     struct Edge {
-        Edge(Vertex end, T weight_edge) : end_edge{end}, weight{weight_edge} {
+        Edge(Vertex start, Vertex end, U new_weight = 1) : start_edge{start}, end_edge{end}, weight{new_weight} {
         }
 
+        Vertex start_edge;
         Vertex end_edge;
-        T weight;
 
-        bool operator>(const Edge &other) const {
-            return weight > other.weight;
-        }
+        U weight;
     };
 
-    virtual const std::vector<Edge> &GetNeighbors(Vertex v) const = 0;
-    virtual void AddEdge(Vertex from, Vertex to, T weight) = 0;
+    virtual void AddEdge(Vertex from, Vertex to, U weight = 1) = 0;
+    virtual U GetEdgeWeight(Vertex from, Vertex to) = 0;
     virtual size_t Size() const = 0;
     virtual ~IGraph() = default;
 };
 
-template <typename T>
-class ListGraph : public IGraph<T> {
-    using typename IGraph<T>::Vertex;
-    using typename IGraph<T>::Edge;
+template <typename T, typename U>
+struct EdgeLess {
+    using Edge = typename IGraph<T, U>::Edge;
 
-    std::vector<std::vector<Edge>> vertices_;
+    bool operator()(const Edge &lhs, const Edge &rhs) const {
+        return (lhs.start_edge != rhs.start_edge ? lhs.start_edge < rhs.start_edge : lhs.end_edge < rhs.end_edge);
+    }
+};
+
+template <typename T, typename U>
+class ListGraph : public IGraph<T, U> {
+    using typename IGraph<T, U>::Vertex;
+    using typename IGraph<T, U>::Edge;
+
+    std::vector<std::vector<Vertex>> vertices_;
+    std::map<Edge, U, EdgeLess<T, U>> weights_;
 
 public:
     explicit ListGraph(size_t num_vertices) : vertices_(num_vertices) {
     }
 
-    const std::vector<Edge> &GetNeighbors(Vertex v) const override {
-        return vertices_[v];
+    void AddEdge(Vertex from, Vertex to, U weight = 1) override {
+        vertices_[from].emplace_back(to);
+        weights_[Edge(from, to)] += weight;
     }
 
-    void AddEdge(Vertex from, Vertex to, T weight) override {
-        vertices_[from].emplace_back(to, weight);
+    U GetEdgeWeight(Vertex from, Vertex to) override {
+        return weights_[Edge(from, to)];
     }
 
     size_t Size() const override {
@@ -51,27 +61,28 @@ public:
 
 enum class Color { WHITE, BLACK };
 
-template <typename T>
-void FindMinDistancesBetweenAllVertices(IGraph<T> &graph, std::vector<std::vector<T>> &distance) {
-    for (size_t vertex{0}; vertex < graph.Size(); ++vertex) {
-        for (const auto &neighbor : graph.GetNeighbors(vertex)) {
-            auto adjacent_vertex = neighbor.end_edge, current_weight = neighbor.weight;
-            distance[vertex][adjacent_vertex] = current_weight;
+template <typename T, typename U>
+void FindMinDistancesBetweenAllVertices(IGraph<T, U> &graph, std::vector<std::vector<U>> &distance) {
+    for (size_t current_vertex{0}; current_vertex < graph.Size(); ++current_vertex) {
+        for (size_t next_vertex{0}; next_vertex < graph.Size(); ++next_vertex) {
+            distance[current_vertex][next_vertex] = graph.GetEdgeWeight(current_vertex, next_vertex);
         }
     }
 
-    for (size_t i{0}; i < graph.Size(); ++i) {
-        for (size_t j{0}; j < graph.Size(); ++j) {
-            for (size_t k{0}; k < graph.Size(); ++k) {
-                distance[j][k] = std::min(distance[j][k], distance[j][i] + distance[i][k]);
+    for (size_t intermediate_vertex{0}; intermediate_vertex < graph.Size(); ++intermediate_vertex) {
+        for (size_t current_vertex{0}; current_vertex < graph.Size(); ++current_vertex) {
+            for (size_t next_vertex{0}; next_vertex < graph.Size(); ++next_vertex) {
+                distance[current_vertex][next_vertex] =
+                    std::min(distance[current_vertex][next_vertex], distance[current_vertex][intermediate_vertex] +
+                                                                        distance[intermediate_vertex][next_vertex]);
             }
         }
     }
 }
 
-template <typename T>
-void PrintMinDistancesBetweenAllVertices(IGraph<T> &graph) {
-    std::vector<std::vector<T>> distance(graph.Size(), std::vector<T>(graph.Size()));
+template <typename T, typename U>
+void PrintMinDistancesBetweenAllVertices(IGraph<T, U> &graph) {
+    std::vector<std::vector<U>> distance(graph.Size(), std::vector<U>(graph.Size()));
 
     FindMinDistancesBetweenAllVertices(graph, distance);
 
@@ -87,11 +98,11 @@ void Initialization(size_t &num_vertices) {
     std::cin >> num_vertices;
 }
 
-template <typename T>
-void AddingEdge(IGraph<T> &graph, size_t num_vertices) {
+template <typename T, typename U>
+void AddingEdge(IGraph<T, U> &graph, size_t num_vertices) {
     for (size_t from{0}; from < num_vertices; ++from) {
         for (size_t to{0}; to < num_vertices; ++to) {
-            T weight{0};
+            U weight{0};
             std::cin >> weight;
             if (from != to) {
                 graph.AddEdge(from, to, weight);  // We use numbering from 0
@@ -109,7 +120,7 @@ int main() {
 
     Initialization(num_vertices);
 
-    ListGraph<int> graph(num_vertices);
+    ListGraph<int, int> graph(num_vertices);
 
     AddingEdge(graph, num_vertices);
 
