@@ -1,36 +1,34 @@
 #include <iostream>
 #include <limits>
-#include <utility>
+#include <map>
 #include <vector>
 #include <queue>
 
-template <typename T>
+template <typename T, typename U>
 class IGraph {
 public:
     using Vertex = T;
 
     struct Edge {
-        Edge(Vertex end, T weight_edge) : end_edge{end}, weight{weight_edge} {
+        Edge(Vertex start, Vertex end, U new_weight = 1) : start_edge{start}, end_edge{end}, weight{new_weight} {
         }
 
+        Vertex start_edge;
         Vertex end_edge;
-        T weight;
 
-        bool operator>(const Edge &other) const {
-            return weight > other.weight;
-        }
+        U weight;
     };
 
     virtual const std::vector<Edge> &GetNeighbors(Vertex v) const = 0;
-    virtual void AddEdge(Vertex from, Vertex to, T weight) = 0;
+    virtual void AddEdge(Vertex from, Vertex to, U weight = 1) = 0;
     virtual size_t Size() const = 0;
     virtual ~IGraph() = default;
 };
 
-template <typename T>
-class ListGraph : public IGraph<T> {
-    using typename IGraph<T>::Vertex;
-    using typename IGraph<T>::Edge;
+template <typename T, typename U>
+class ListGraph : public IGraph<T, U> {
+    using typename IGraph<T, U>::Vertex;
+    using typename IGraph<T, U>::Edge;
 
     std::vector<std::vector<Edge>> vertices_;
 
@@ -42,8 +40,8 @@ public:
         return vertices_[v];
     }
 
-    void AddEdge(Vertex from, Vertex to, T weight) override {
-        vertices_[from].emplace_back(to, weight);
+    void AddEdge(Vertex from, Vertex to, U weight = 1) override {
+        vertices_[from].emplace_back(from, to, weight);
     }
 
     size_t Size() const override {
@@ -53,19 +51,18 @@ public:
 
 enum class Color { WHITE, BLACK };
 
-template <typename T>
-void FindMinDistanceBetweenTwoVertices(IGraph<T> &graph, std::vector<T> &distance, T start_vertex,
-                                       size_t weight_moving_to_next_vertex, size_t weight_moving_to_prev_vertex) {
-    using Edge = typename IGraph<T>::Edge;
-
-    const size_t max_possible_floor = 1'000'000;
+template <typename T, typename U>
+void FindMinDistanceBetweenTwoVertices(IGraph<T, U> &graph, std::vector<U> &distance, T start_vertex) {
+    using Edge = typename IGraph<T, U>::Edge;
 
     distance[start_vertex] = 0;
 
     std::vector<Color> colors(graph.Size(), Color::WHITE);
 
-    std::priority_queue<Edge, std::vector<Edge>, std::greater<Edge>> vertices_queue;
-    vertices_queue.emplace(start_vertex, 0);
+    auto edges_weights_greater = [](const Edge &lhs, const Edge &rhs) { return lhs.weight > rhs.weight; };
+
+    std::priority_queue<Edge, std::vector<Edge>, decltype(edges_weights_greater)> vertices_queue(edges_weights_greater);
+    vertices_queue.emplace(start_vertex, start_vertex, 0);
 
     while (!vertices_queue.empty()) {
         auto current_edge = vertices_queue.top();
@@ -80,34 +77,35 @@ void FindMinDistanceBetweenTwoVertices(IGraph<T> &graph, std::vector<T> &distanc
 
                 if (distance[current_vertex] + current_weight < distance[adjacent_vertex]) {
                     distance[adjacent_vertex] = distance[current_vertex] + current_weight;
-                    vertices_queue.emplace(adjacent_vertex, distance[adjacent_vertex]);
+                    vertices_queue.emplace(current_vertex, adjacent_vertex, distance[adjacent_vertex]);
                 }
-            }
-
-            if (current_vertex + 1 < max_possible_floor &&
-                distance[current_vertex] + weight_moving_to_next_vertex < distance[current_vertex + 1]) {
-                distance[current_vertex + 1] = distance[current_vertex] + weight_moving_to_next_vertex;
-                vertices_queue.emplace(current_vertex + 1, distance[current_vertex + 1]);
-            }
-
-            if (current_vertex > 0 && current_vertex < max_possible_floor &&
-                distance[current_vertex] + weight_moving_to_prev_vertex < distance[current_vertex - 1]) {
-                distance[current_vertex - 1] = distance[current_vertex] + weight_moving_to_prev_vertex;
-                vertices_queue.emplace(current_vertex - 1, distance[current_vertex - 1]);
             }
         }
     }
 }
 
-template <typename T>
-void GetMinDistanceBetweenTwoVertices(IGraph<T> &graph, T start_vertex, T end_vertex,
-                                      size_t weight_moving_to_next_vertex, size_t weight_moving_to_prev_vertex) {
-    std::vector<T> distance(graph.Size(), std::numeric_limits<T>::max());
+template <typename T, typename U>
+U GetMinDistanceBetweenTwoVertices(IGraph<T, U> &graph, T start_vertex, T end_vertex) {
+    std::vector<U> distance(graph.Size(), std::numeric_limits<U>::max());
 
-    FindMinDistanceBetweenTwoVertices(graph, distance, start_vertex, weight_moving_to_next_vertex,
-                                      weight_moving_to_prev_vertex);
+    FindMinDistanceBetweenTwoVertices(graph, distance, start_vertex);
 
-    std::cout << distance[end_vertex];
+    return distance[end_vertex];
+}
+
+template <typename T, typename U>
+T GetMinCostLiftingSafe(IGraph<T, U> &skyscraper, size_t skyscraper_floor_number) {
+    size_t start_floor{0};  // We use numbering from 0
+    auto min_cost_lifting_safe = GetMinDistanceBetweenTwoVertices(skyscraper, start_floor, skyscraper_floor_number);
+
+    return min_cost_lifting_safe;
+}
+
+template <typename T, typename U>
+void PrintMinCostLiftingSafe(IGraph<T, U> &skyscraper, size_t skyscraper_floor_number) {
+    auto min_cost_lifting_safe = GetMinCostLiftingSafe(skyscraper, skyscraper_floor_number);
+
+    std::cout << min_cost_lifting_safe;
 }
 
 void Initialization(size_t &skyscraper_floor_number, size_t &cost_climbing_stairs, size_t &cost_descending_stairs,
@@ -118,10 +116,13 @@ void Initialization(size_t &skyscraper_floor_number, size_t &cost_climbing_stair
     --skyscraper_floor_number;  // We use numbering from 0
 }
 
-template <typename T>
-void BuildMovementsElevators(IGraph<T> &skyscraper, size_t num_elevators, size_t cost_entry_into_elevator,
-                             size_t cost_removal_from_elevator) {
+template <typename T, typename U>
+void BuildMovementsElevators(IGraph<T, U> &skyscraper, size_t skyscraper_floor_number, size_t num_elevators,
+                             size_t cost_entry_into_elevator, size_t cost_removal_from_elevator,
+                             size_t cost_climbing_stairs, size_t cost_descending_stairs) {
     const size_t max_possible_floor = 1'000'000;
+
+    size_t total_num_floors = skyscraper_floor_number;
 
     for (size_t i{0}; i < num_elevators; ++i) {
         size_t num_floors_with_elevator_stops{0};
@@ -132,18 +133,21 @@ void BuildMovementsElevators(IGraph<T> &skyscraper, size_t num_elevators, size_t
             std::cin >> current_stop_floor;
             --current_stop_floor;  // We use numbering from 0
 
+            total_num_floors = std::max(total_num_floors, current_stop_floor);
+
             skyscraper.AddEdge(current_stop_floor, max_possible_floor + i, cost_entry_into_elevator);
             skyscraper.AddEdge(max_possible_floor + i, current_stop_floor, cost_removal_from_elevator);
         }
     }
-}
 
-template <typename T>
-void GetMinCostLiftingSafe(IGraph<T> &skyscraper, size_t skyscraper_floor_number, size_t cost_climbing_stairs,
-                           size_t cost_descending_stairs) {
-    size_t start_floor{0};  // We use numbering from 0
-    GetMinDistanceBetweenTwoVertices(skyscraper, start_floor, skyscraper_floor_number, cost_climbing_stairs,
-                                     cost_descending_stairs);
+    for (size_t floor{0}; floor < total_num_floors; ++floor) {
+        if (floor + 1 < max_possible_floor) {
+            skyscraper.AddEdge(floor, floor + 1, cost_climbing_stairs);
+        }
+        if (floor > 0) {
+            skyscraper.AddEdge(floor, floor - 1, cost_descending_stairs);
+        }
+    }
 }
 
 int main() {
@@ -159,11 +163,12 @@ int main() {
     Initialization(skyscraper_floor_number, cost_climbing_stairs, cost_descending_stairs, cost_entry_into_elevator,
                    cost_removal_from_elevator, num_elevators);
 
-    ListGraph<size_t> skyscraper(max_possible_floor + num_elevators);
+    ListGraph<size_t, size_t> skyscraper(max_possible_floor + num_elevators);
 
-    BuildMovementsElevators(skyscraper, num_elevators, cost_entry_into_elevator, cost_removal_from_elevator);
+    BuildMovementsElevators(skyscraper, skyscraper_floor_number, num_elevators, cost_entry_into_elevator,
+                            cost_removal_from_elevator, cost_climbing_stairs, cost_descending_stairs);
 
-    GetMinCostLiftingSafe(skyscraper, skyscraper_floor_number, cost_climbing_stairs, cost_descending_stairs);
+    PrintMinCostLiftingSafe(skyscraper, skyscraper_floor_number);
 
     return 0;
 }
