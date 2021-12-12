@@ -1,41 +1,35 @@
 #include <algorithm>
 #include <ios>
 #include <iostream>
-#include <memory>
-#include <utility>
 #include <vector>
 #include <numeric>
 
-template <typename T>
+template <typename T, typename U>
 class IGraph {
 public:
     using Vertex = T;
 
     struct Edge {
-        Edge(Vertex start, Vertex end, T weight_edge)
-            : start_edge{std::min(start, end)}, end_edge{std::max(start, end)}, weight{weight_edge} {
+        Edge(Vertex start, Vertex end, U new_weight = 1) : start_edge{start}, end_edge{end}, weight{new_weight} {
         }
 
         Vertex start_edge;
         Vertex end_edge;
-        T weight;
 
-        bool operator<(const Edge &other) const {
-            return weight < other.weight;
-        }
+        U weight;
     };
 
     virtual const std::vector<T> &GetNeighbors(Vertex v) const = 0;
+    virtual void AddEdge(Vertex from, Vertex to, U weight = 1) = 0;
     virtual const std::vector<Edge> &GetEdges() const = 0;
-    virtual void AddEdge(Vertex from, Vertex to, T weight) = 0;
     virtual size_t Size() const = 0;
     virtual ~IGraph() = default;
 };
 
-template <typename T>
-class ListGraph : public IGraph<T> {
-    using typename IGraph<T>::Vertex;
-    using typename IGraph<T>::Edge;
+template <typename T, typename U>
+class ListGraph : public IGraph<T, U> {
+    using typename IGraph<T, U>::Vertex;
+    using typename IGraph<T, U>::Edge;
 
     std::vector<std::vector<Vertex>> vertices_;
     std::vector<Edge> edges_;
@@ -48,14 +42,14 @@ public:
         return vertices_[v];
     }
 
-    const std::vector<Edge> &GetEdges() const override {
-        return edges_;
+    void AddEdge(Vertex from, Vertex to, U weight = 1) override {
+        vertices_[from].emplace_back(to);
+        vertices_[to].emplace_back(from);
+        edges_.emplace_back(from, to, weight);
     }
 
-    void AddEdge(Vertex from, Vertex to, T weight) override {
-        vertices_[from].push_back(to);
-        vertices_[to].push_back(from);
-        edges_.push_back({from, to, weight});
+    const std::vector<Edge> &GetEdges() const override {
+        return edges_;
     }
 
     size_t Size() const override {
@@ -80,7 +74,9 @@ private:
 
 template <typename T>
 DisjointSet<T>::DisjointSet(size_t num_sets) : parent_(num_sets), size_(num_sets) {
-    std::iota(parent_.begin(), parent_.end(), 0);
+    for (size_t i{0}; i < num_sets; ++i) {
+        parent_[i] = i;
+    }
 }
 
 template <typename T>
@@ -98,13 +94,13 @@ void DisjointSet<T>::Union(T first, T second) {
     if (first_id == second_id) {
         return;
     }
-    if (size_[first_id] > size_[second_id]) {
-        parent_[second_id] = first_id;
+    if (size_[first_id] < size_[second_id]) {
+        std::swap(first_id, second_id);
+    } else if (size_[first_id] == size_[second_id]) {
         ++size_[first_id];
-    } else {
-        parent_[first_id] = second_id;
-        ++size_[second_id];
     }
+
+    parent_[second_id] = first_id;
 }
 
 template <typename T>
@@ -112,31 +108,47 @@ bool DisjointSet<T>::ElementsInSameSet(T first, T second) {
     return Find(first) == Find(second);
 }
 
-template <typename T>
-T FindMinCostSavingWorld(IGraph<T> &spies_costs) {
-    using Edge = typename IGraph<T>::Edge;
+template <typename T, typename U>
+std::vector<typename IGraph<T, U>::Edge> GetEdgesMinSpanningTree(IGraph<T, U> &graph) {
+    using Edge = typename IGraph<T, U>::Edge;
 
-    T min_cost{0};
+    std::vector<Edge> edges_min_spannig_tree;
 
-    DisjointSet<T> spies_sets(spies_costs.Size());
+    DisjointSet<T> set_edges(graph.Size());
 
-    std::vector<Edge> costs = spies_costs.GetEdges();
+    std::vector<Edge> graph_edges = graph.GetEdges();
 
-    std::sort(costs.begin(), costs.end());
+    auto edges_less_cmp = [](const Edge &lhs, const Edge &rhs) { return lhs.weight < rhs.weight; };
 
-    for (const auto &cost : costs) {
-        if (!spies_sets.ElementsInSameSet(cost.start_edge, cost.end_edge)) {
-            spies_sets.Union(cost.end_edge, cost.start_edge);
-            min_cost += cost.weight;
+    std::sort(graph_edges.begin(), graph_edges.end(), edges_less_cmp);
+
+    for (const auto &current_edge : graph_edges) {
+        if (!set_edges.ElementsInSameSet(current_edge.start_edge, current_edge.end_edge)) {
+            set_edges.Union(current_edge.end_edge, current_edge.start_edge);
+            edges_min_spannig_tree.emplace_back(current_edge);
         }
     }
 
-    return min_cost;
+    return edges_min_spannig_tree;
 }
 
-template <typename T>
-void PrintMinCostSavingWorld(IGraph<T> &spies_costs) {
-    T min_cost = FindMinCostSavingWorld(spies_costs);
+template <typename T, typename U>
+U GetWeightMinSpanningTree(IGraph<T, U> &graph) {
+    using Edge = typename IGraph<T, U>::Edge;
+
+    std::vector<Edge> edges_min_spannig_tree = GetEdgesMinSpanningTree(graph);
+
+    U weight_min_spanning_tree{0};
+    for (const auto &current_edge : edges_min_spannig_tree) {
+        weight_min_spanning_tree += current_edge.weight;
+    }
+
+    return weight_min_spanning_tree;
+}
+
+template <typename T, typename U>
+void PrintMinCostSavingWorld(IGraph<T, U> &spies_costs) {
+    U min_cost = GetWeightMinSpanningTree(spies_costs);
 
     std::cout << min_cost;
 }
@@ -145,22 +157,22 @@ void Initialization(size_t &num_vertices) {
     std::cin >> num_vertices;
 }
 
-template <typename T>
-void AddingEdge(IGraph<T> &graph) {  // We use numbering from 0
-    for (size_t from{0}; from < graph.Size() - 1; ++from) {
-        for (size_t to{0}; to < graph.Size() - 1; ++to) {
-            T weight{0};
-            std::cin >> weight;
-            if (from != to) {
-                graph.AddEdge(from, to, weight);
+template <typename T, typename U>
+void SetMeetingCosts(IGraph<T, U> &spies_costs) {  // We use numbering from 0
+    for (size_t first_spy{0}; first_spy < spies_costs.Size() - 1; ++first_spy) {
+        for (size_t second_spy{0}; second_spy < spies_costs.Size() - 1; ++second_spy) {
+            U cost{0};
+            std::cin >> cost;
+            if (first_spy != second_spy) {
+                spies_costs.AddEdge(first_spy, second_spy, cost);
             }
         }
     }
 
-    for (size_t current_vertex{0}; current_vertex < graph.Size() - 1; ++current_vertex) {
-        T weight{0};
-        std::cin >> weight;
-        graph.AddEdge(current_vertex, graph.Size() - 1, weight);
+    for (size_t current_spy{0}; current_spy < spies_costs.Size() - 1; ++current_spy) {
+        U cost{0};
+        std::cin >> cost;
+        spies_costs.AddEdge(current_spy, spies_costs.Size() - 1, cost);
     }
 }
 
@@ -173,10 +185,10 @@ int main() {
 
     Initialization(num_spies);
 
-    ListGraph<size_t> spies_costs(
+    ListGraph<size_t, size_t> spies_costs(
         num_spies + 1);  // We additionally store information about the cost of sending each spy on a mission
 
-    AddingEdge(spies_costs);
+    SetMeetingCosts(spies_costs);
 
     PrintMinCostSavingWorld(spies_costs);
 
